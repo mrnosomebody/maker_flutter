@@ -16,9 +16,55 @@ class WTG extends StatelessWidget {
 
   Future get jwtOrEmpty async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    var jwt = prefs.getString('jwt');
-    if (jwt == null) return '';
-    return jwt;
+    final accessToken = prefs.getString('jwtAccessToken');
+    print('jwtOrEmpty()');
+    print(accessToken);
+    if (accessToken != null) {
+      if (jwtIsValid(accessToken)) {
+        return accessToken;
+      } else {
+        final bool isRefreshed = await refreshJWT();
+        print(isRefreshed);
+        if (isRefreshed) return prefs.getString('jwtAccessToken');
+      }
+    }
+    return '';
+  }
+
+  bool jwtIsValid(accessToken) {
+    // print('jwtIsValid()');
+    final accessTokenExpireTime = json.decode(utf8.decode(base64.decode(
+        base64.normalize(accessToken.toString().split('.')[1]))))['exp'];
+    // print(accessTokenExpireTime);
+    return DateTime.fromMillisecondsSinceEpoch(accessTokenExpireTime * 1000)
+        .isAfter(DateTime.now());
+  }
+
+  Future refreshJWT() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final accessToken = prefs.getString('jwtAccessToken');
+    final refreshToken = prefs.getString('jwtRefreshToken');
+
+    print('\n===========================================');
+    final response = await http.post(Uri.parse(services.JWT_REFRESH_PATH),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json; chatset=UTF-8'
+        },
+        body: json.encode({'refresh': refreshToken}));
+    // print(prefs.getString('accessToken'));
+    // print(prefs.getString('refreshToken'));
+    if (response.statusCode == 200) {
+      final accessToken = json.decode(response.body)['access'];
+      print(accessToken);
+      prefs.setString('jwtAccessToken', accessToken);
+      return true;
+    } else {
+      prefs.clear();
+      print(prefs.getString('jwtAccessToken'));
+      print(prefs.getString('jwtRefreshToken'));
+      return false;
+    }
   }
 
   @override
@@ -29,30 +75,10 @@ class WTG extends StatelessWidget {
       home: FutureBuilder(
         future: jwtOrEmpty,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return CircularProgressIndicator();
-          if (snapshot.data != '') {
-            var snapData = snapshot.data;
-            var jwt = snapData.toString().split('.');
-            if (jwt.length != 5) {
-              return AuthPage();
-            } else {
-              // var response = http.post(Uri.parse(services.JWT_VERIFY_PATH))
-              // print(snapData);
-              
-              var jwtDecoded = json
-                  .decode(utf8.decode(base64.decode(base64.normalize(jwt[3]))));
-              if (DateTime.fromMillisecondsSinceEpoch(jwtDecoded['exp'] * 1000)
-                  .isAfter(DateTime.now())) {
-                return 
-                HomePage(
-                    snapData.toString(), jwtDecoded);
-              } else {
-                return AuthPage();
-              }
-            }
-          } else {
-            return AuthPage();
+          if (snapshot.hasData) {
+            return HomePage(snapshot.data.toString());
           }
+          return AuthPage();
         },
       ),
     );
