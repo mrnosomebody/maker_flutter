@@ -1,12 +1,9 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/api.dart' as services;
-
-const SERVER_IP = 'http://127.0.0.1:8000';
 
 bool _emailIsValid(var email) => RegExp(
         r'^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$')
@@ -94,10 +91,14 @@ class _AuthFormState extends State<_AuthForm> {
     if (_emailIsValid(email) && password.length >= 8) {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       error = '';
-      var jwtToken = await _tryLogin(email, password);
-
-      if (jwtToken != null) {
-        await prefs.setString('jwt', jwtToken);
+      var jwtTokens = await _tryLogin(email, password);
+      if (jwtTokens != null) {
+        await prefs.setString(
+            'jwtAccessToken', json.decode(jwtTokens)['access']);
+        await prefs.setString(
+            'jwtRefreshToken', json.decode(jwtTokens)['refresh']);
+        print('${prefs.getString('jwtAccessToken')} aaccc');
+        print(prefs.getString('jwtRefreshToken'));
       } else {
         _displayDialog(context, "Error", "User not found");
       }
@@ -114,7 +115,6 @@ class _AuthFormState extends State<_AuthForm> {
     if (_emailIsValid(email) && password.length >= 8) {
       error = '';
       var response = await _trySignup(email, password);
-      print(response);
       if (response == 201) {
         _displayDialog(context, 'Success', 'Acount created');
       } else if (response == 409) {
@@ -122,7 +122,7 @@ class _AuthFormState extends State<_AuthForm> {
       } else {
         _displayDialog(context, "Error", "Some error");
       }
-    } 
+    }
     setState(() {});
   }
 
